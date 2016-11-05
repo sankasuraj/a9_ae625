@@ -1,4 +1,4 @@
 # Assignment - 9 
-# Particle Method for Fluid FLow Simulation
+# Particle Methods for Fluid FLow Simulation
 
 
