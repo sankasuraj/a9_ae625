@@ -39,8 +39,8 @@ def initialise() :
     return x, rho, velocity, p, energy
 
 def get_neighbourhood( x, index ) :
-    low = max( x[index] - 2.00000001 * h, min( x ) )
-    high = min( x[index] + 2.00000001 * h, max( x ) )
+    low = max( x[index] - 2.0000000001 * h, min( x ) )
+    high = min( x[index] + 2.0000000001 * h, max( x ) )
     neighbourhood = []
     index1 = copy.deepcopy( index )
     while True:
@@ -58,25 +58,14 @@ def get_neighbourhood( x, index ) :
         if x[index1] > high :
             break
         neighbourhood.append( x[index1] )
-    if index != 0 :
-        index += 1
-    return np.array( neighbourhood ), index
-
-def get_density_rate( rho, velocity, x ) :
-    density_rate = np.zeros_like( x )
-    for i, x_i in enumerate( x ) :
-        x_near, index = get_neighbourhood( x, i )
-        for j, x_j in enumerate( x_near ) :
-            r = x_i - x_j
-            v_ij = ( velocity[i] + velocity[j + index] ) / 2.0
-            density_rate[i] += rho[i] * v_ij * derivative_kernel_cubic_spline( r ) * mass / rho[j + index]
-    return rho
+    delta_x_l = x[1] - x[0]
+    return np.array( neighbourhood ), np.where( x == neighbourhood[0] )[0][0]
 
 def artificial_viscosity( p_a, p_b, rho_a, rho_b, x_a, x_b, v_a, v_b ) :
     v_ab = v_a - v_b
     x_ab = x_a - x_b
     approach = v_ab * x_ab
-    if approach > 0.0 :
+    if approach >= 0.0 :
         return 0.0
     else :
         mu_ab = h * approach / ( x_ab * x_ab + 0.01 * h * h )
@@ -87,85 +76,134 @@ def artificial_viscosity( p_a, p_b, rho_a, rho_b, x_a, x_b, v_a, v_b ) :
         pi_ab = ( -alpha * c_ab * mu_ab + beta * mu_ab * mu_ab ) / rho_ab
         return pi_ab
 
-def get_velocity_rate( rho, p, velocity, x ) :
-    velocity_rate = np.zeros_like( x )
+def get_derivatives( p, rho, velocity, x ) :
+    rho_rate = np.zeros_like( x )
+    v_rate = np.zeros_like( x )
+    e_rate = np.zeros_like( x )
+    x_sph = np.zeros_like( x )
     for i, x_i in enumerate( x ) :
         x_near, index = get_neighbourhood( x, i )
         for j, x_j in enumerate( x_near ) :
             r = x_i - x_j
-            pi = artificial_viscosity( p[i], p[j + index], rho[i], rho[j + index], x_i, x_j, velocity[i], velocity[j + index] )
-            velocity_rate[i] -= mass * ( p[i] / ( rho[i] * rho[i] ) + p[j + index] / ( rho[j + index] * rho[j + index] ) + pi ) * derivative_kernel_cubic_spline( r )
-    return velocity_rate
+            j_ind = j + index
+            v_ij = velocity[i] - velocity[j_ind]
+            rho_rate[i] += rho[i] * mass * v_ij * derivative_kernel_cubic_spline( r ) / rho[j_ind]
+            pi_ab = artificial_viscosity( p[i], p[j_ind], rho[i], rho[j_ind], 
+                x[i], x[j_ind], velocity[i], velocity[j_ind] )
+            v_rate[i] -= mass * ( p[i] / ( rho[i] * rho[i] ) + p[j_ind] / 
+                ( rho[j_ind] * rho[j_ind] ) + pi_ab ) * derivative_kernel_cubic_spline( r )
+            e_rate[i] += 0.5 * mass * ( p[i] / ( rho[i] * rho[i] ) + p[j_ind] / 
+                ( rho[j_ind] * rho[j_ind] ) + pi_ab ) * v_ij * derivative_kernel_cubic_spline( r )
+            
+            rho_av = ( rho[i] + rho[j_ind] ) / 2.0
+            x_sph[i] -= 0.5 * v_ij * kernel_cubic_spline( r ) * mass / rho_av
+    position_rate = x_sph + velocity
+    return v_rate, e_rate, position_rate
 
-def get_energy_rate( rho, p, velocity, x ) :
-    energy_rate = np.zeros_like( x )
+def get_density( x ) :
+    rho = np.zeros_like( x )
     for i, x_i in enumerate( x ) :
         x_near, index = get_neighbourhood( x, i )
         for j, x_j in enumerate( x_near ) :
             r = x_i - x_j
-            pi = artificial_viscosity( p[i], p[j + index], rho[i], rho[j + index], x_i, x_j, velocity[i], velocity[j + index] )
-            v_ij = ( velocity[i] + velocity[j] ) / 2.0
-            energy_rate[i] += 0.5 * mass * v_ij * ( p[i] / ( rho[i] * rho[i] ) + p[j + index] / ( rho[j + index] * rho[j + index] ) + pi ) * derivative_kernel_cubic_spline( r )    
-    return energy_rate
-
-def get_position_rate( rho, velocity, x ) :
-    position_rate = np.zeros_like( x )
-    for i, x_i in enumerate( x ) :
-        x_near, index = get_neighbourhood( x, i )
-        for j, x_j in enumerate( x_near ) :
-            r = x_i - x_j
-            xsph = 0.5 * ( velocity[j + index] - velocity[i] ) * kernel_cubic_spline( r ) * mass / rho[j + index]
-            position_rate[i] = position_rate[i] + xsph + velocity[j + index] * kernel_cubic_spline( r ) * mass / rho[j + index]
-    return position_rate
-
-def euler_integrator( quantity, rate, time_step ) :
-    new_quantity = quantity + rate * time_step
-    return new_quantity
+            rho[i] += mass * kernel_cubic_spline( r )
+    return rho
 
 def sod() :
-    x_old, rho_old, v_old, p_old, e_old = initialise()
+    x, rho, v, p, e = initialise()
     t = 0.0
-    ind = 0
     while t <= total_t :
         print t
-        rho_rate = get_density_rate( rho_old, v_old, x_old )
-        rho_new = euler_integrator( rho_old, rho_rate, dt )
-        v_rate = get_velocity_rate( rho_old, p_old, v_old, x_old )
-        v_new = euler_integrator( v_old, v_rate, dt )
-        e_rate = get_energy_rate( rho_old, p_old, v_old, x_old )
-        e_new = euler_integrator( e_old, e_rate, dt )
-        position_rate = get_position_rate( rho_old, v_old, x_old )
-        x_new = euler_integrator( x_old, position_rate, dt )
-        p_new = ( gamma - 1.0 ) * rho_new * e_new
-        x_old = copy.deepcopy( x_new )
-        rho_old = copy.deepcopy( rho_new )
-        p_old = copy.deepcopy( p_new )
-        e_old = copy.deepcopy( e_new )
-        v_old = copy.deepcopy( v_new )
-        if np.isnan(np.prod(x_old)) :
-            print 'x is out of bound'
-        if np.isnan(np.prod(v_old)) :
-            print 'v is out of bound'
-        if np.prod(rho_old) == 0.0 :
-            print 'density is 0'
+        v_rate, e_rate, x_rate = get_derivatives( p, rho, v, x )
+        rho = get_density( x )
+        v += v_rate * dt
+        e += e_rate * dt
+        x += x_rate * dt
+        p = ( gamma - 1.0 ) * rho * e
         t += dt
-        if ind%200 == 0 :
-            plt.figure( figsize = ( 17.0, 10.0 ) )
-            plt.plot( x_old, rho_old )
-            plt.savefig( str( t ) + '.png' )
-            plt.close()
-        ind += 1
-    return p_old, x_old, rho_old, v_old, e_old
-    
+    return rho, v, p, e, x
+
+def exact_solution( p1, p5, rho1, rho5 ) :
+    p1 = 1.0
+    p5 = 0.1
+    rho1 = 1.0
+    rho5 = 0.125
+    gamma = 1.4
+    sigma = ( gamma - 1.0 ) / ( 1.0 + gamma )
+    b = ( gamma - 1.0 ) / ( 2.0 * gamma )
+    residue = []
+    p3_check = np.linspace( p5, p1, 10001 )
+    for p3 in p3_check :
+        u4 = ( p3 - p5 ) * np.sqrt( ( 1 - sigma ) / ( rho5 * ( p3 + sigma * p5 ) ) )
+        u2 = ( p1**b - p3**b ) * np.sqrt( ( 1.0 - sigma * sigma ) * p1**(1.0/gamma) / rho1 ) / sigma
+        residue.append( abs( u2 - u4 ) )
+    index = np.argmin( residue )
+    p3 = p3_check[index]
+    u5 = np.sqrt( gamma * p5 / rho5 )
+    u1 = np.sqrt( gamma * p1 / rho1 )
+    u3 = u5 + ( p3 - p5 ) / ( np.sqrt( rho5 * 0.5 * ( ( gamma + 1.0 ) * p3 + ( gamma - 1.0 ) * p5 ) ) )
+    u4 = u3
+    rho3 = rho1 * ( p3 / p1 )**(1.0/gamma)
+    p4 = p3
+    rho4 = rho5 * ( p4 + sigma * p5 ) / ( p5 + sigma * p4 )
+    x = np.array( [ -0.5, -0.25, 0.0, 0.199, 0.2, 0.399, 0.4, 0.5 ] )
+    p = np.array( [ p1, p1, p3, p3, p4, p4, p5, p5 ] )
+    v = np.array( [ u1, u1, u3, u3, u4, u4, u5, u5 ] )
+    rho = np.array( [ rho1, rho1, rho3, rho3, rho4, rho4, rho5, rho5 ] )
+    e = p / ( ( gamma - 1.0 ) * rho )
+    return rho, v, p, e, x
+
+def plot() :
+    rho, v, p, e, x = sod()
+    rho_exact, v_exact, p_exact, e_exact, x_exact = exact_solution( 1.0, 0.1, 1.0, 0.125 )
+    plt.figure( figsize = ( 17.0, 10.0 ) )
+    plt.plot( x, rho, label = 'SPH' )
+    plt.plot( x_exact, rho_exact, 'r', label = 'Exact solution' )
+    plt.legend()
+    plt.title( "Density variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
+    plt.ylabel( "Density, $\\rho$ in $\\frac{kg}{m^3}$", fontweight = 'bold', fontsize = 24 )
+    plt.xlabel( "x", fontweight = 'bold', fontsize = 24 )
+    plt.savefig( "density.png" )
+    plt.close()
+    plt.clf()
+    plt.figure( figsize = ( 17.0, 10.0 ) )
+    plt.plot( x, p, label = 'SPH' )
+    plt.plot( x_exact, p_exact, 'r', label = 'Exact solution' )
+    plt.legend()
+    plt.title( "Pressure variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
+    plt.ylabel( "Pressure, P in $\\frac{N}{m^2}$", fontweight = 'bold', fontsize = 24 )
+    plt.xlabel( "x", fontweight = 'bold', fontsize = 24 )
+    plt.savefig( "pressure.png" )
+    plt.close()
+    plt.clf()
+    plt.figure( figsize = ( 17.0, 10.0 ) )
+    plt.plot( x, e, label = 'SPH' )
+    plt.plot( x_exact, e_exact, 'r', label = 'Exact solution' )
+    plt.legend()
+    plt.title( "Energy variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
+    plt.ylabel( "Energy, E in $\\frac{m^2}{s^2}$", fontweight = 'bold', fontsize = 24 )
+    plt.xlabel( "x", fontweight = 'bold', fontsize = 24 )
+    plt.savefig( "energy.png" )
+    plt.close()
+    plt.clf()    
+    plt.figure( figsize = ( 17.0, 10.0 ) )
+    plt.plot( x, v, label = 'SPH' )
+    plt.plot( x_exact, v_exact, 'r', label = 'Exact solution' )
+    plt.legend()
+    plt.title( "Velocity variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
+    plt.ylabel( "Velocity, U in $\\frac{m}{s}$", fontweight = 'bold', fontsize = 24 )
+    plt.xlabel( "x", fontweight = 'bold', fontsize = 24 )
+    plt.savefig( "velocity.png" )
+    plt.close()
+    plt.clf()
 
 if __name__ == '__main__':
     mass = 1.0 * 0.0015625 # Mass = density_right * delta_x_right = density_left * delta_x_left
     h = 2.0 * 0.0125
     gamma = 1.4
     dt = 1.0e-4
-    total_t = 0.200001
+    total_t = 0.20000001
     alpha = 1.0
     beta = 1.0
     plt.ioff()
-    plt.clf()
-    p, x, rho, vel, e = sod()
+    plot()
