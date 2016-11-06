@@ -124,11 +124,6 @@ def sod() :
     return rho, v, p, e, x
 
 def exact_solution( p1, p5, rho1, rho5 ) :
-    p1 = 1.0
-    p5 = 0.1
-    rho1 = 1.0
-    rho5 = 0.125
-    gamma = 1.4
     sigma = ( gamma - 1.0 ) / ( 1.0 + gamma )
     b = ( gamma - 1.0 ) / ( 2.0 * gamma )
     residue = []
@@ -139,8 +134,8 @@ def exact_solution( p1, p5, rho1, rho5 ) :
         residue.append( abs( u2 - u4 ) )
     index = np.argmin( residue )
     p3 = p3_check[index]
-    u5 = np.sqrt( gamma * p5 / rho5 )
-    u1 = np.sqrt( gamma * p1 / rho1 )
+    u5 = 0.0
+    u1 = 0.0
     u3 = u5 + ( p3 - p5 ) / ( np.sqrt( rho5 * 0.5 * ( ( gamma + 1.0 ) * p3 + ( gamma - 1.0 ) * p5 ) ) )
     u4 = u3
     rho3 = rho1 * ( p3 / p1 )**(1.0/gamma)
@@ -159,6 +154,7 @@ def plot() :
     plt.figure( figsize = ( 17.0, 10.0 ) )
     plt.plot( x, rho, label = 'SPH' )
     plt.plot( x_exact, rho_exact, 'r', label = 'Exact solution' )
+    plt.axis( [ -0.5, 0.5, 0.0, 1.1 ] )
     plt.legend()
     plt.title( "Density variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
     plt.ylabel( "Density, $\\rho$ in $\\frac{kg}{m^3}$", fontweight = 'bold', fontsize = 24 )
@@ -169,6 +165,7 @@ def plot() :
     plt.figure( figsize = ( 17.0, 10.0 ) )
     plt.plot( x, p, label = 'SPH' )
     plt.plot( x_exact, p_exact, 'r', label = 'Exact solution' )
+    plt.axis( [ -0.5, 0.5, 0.0, 1.1 ] )
     plt.legend()
     plt.title( "Pressure variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
     plt.ylabel( "Pressure, P in $\\frac{N}{m^2}$", fontweight = 'bold', fontsize = 24 )
@@ -179,6 +176,7 @@ def plot() :
     plt.figure( figsize = ( 17.0, 10.0 ) )
     plt.plot( x, e, label = 'SPH' )
     plt.plot( x_exact, e_exact, 'r', label = 'Exact solution' )
+    plt.axis( [ -0.5, 0.5, 0.0, 3.5 ] )
     plt.legend()
     plt.title( "Energy variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
     plt.ylabel( "Energy, E in $\\frac{m^2}{s^2}$", fontweight = 'bold', fontsize = 24 )
@@ -189,6 +187,7 @@ def plot() :
     plt.figure( figsize = ( 17.0, 10.0 ) )
     plt.plot( x, v, label = 'SPH' )
     plt.plot( x_exact, v_exact, 'r', label = 'Exact solution' )
+    plt.axis( [ -0.5, 0.5, -1.2, 1.2 ] )
     plt.legend()
     plt.title( "Velocity variation across SOD shock tube", fontsize = 28, fontweight = 'bold' )
     plt.ylabel( "Velocity, U in $\\frac{m}{s}$", fontweight = 'bold', fontsize = 24 )
