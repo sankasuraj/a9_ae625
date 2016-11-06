@@ -2,25 +2,124 @@
 
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{amsmath}
+\usepackage{hyperref}
 
 \title{\huge Assignment - 9 \\
-		\huge SOD Shock Tube Simulation using SPH \\
+		\large SOD Shock Tube Simulation using SPH \\[0.5in]
 		\large AE - 625 \\
-		\large Particle Methods for Fluid FLow Simulation 		
+		\large Particle Methods for Fluid Flow Simulation 		
 		}
 
 \author{\large Sanka Venkata Sai Suraj \\
 		\large Roll no: 130010057
 		}
 		
-\date{\today}
+\date{November 6, 2016}
 
 \begin{document}
 \maketitle
 
-\section*{Steps followed}
+\section*{Problem Setup}
+The desnity, pressure, velocity are initialised as 
+$ \begin{pmatrix}
+	\rho_l \\
+	p_l \\
+	u_l
+\end{pmatrix} $ = 
+$\begin{pmatrix}
+	1.0 kg/m^3 \\
+	1.0 N/m^2 \\
+	0.0 m/s
+\end{pmatrix} $ and 
+$ \begin{pmatrix}
+	\rho_r \\
+	p_r \\
+	u_r
+\end{pmatrix} $ = 
+$\begin{pmatrix}
+	0.125  kg/m^3 \\
+	0.1  N/m^2 \\
+	0.0 m/s
+\end{pmatrix} $ and e = $\frac{P}{(\gamma-1)\rho}$. 
+320 particles are generated between [-0.5, 0) and 40 particles between (0, 0.5]. h is taken as $2\Delta x_r$ which is 0.025 and it is kept constant throughout the problem. Mass = $\rho_l\Delta x_l = \rho_r\Delta x_r$ = 0.0015625 which is same for all the particles and is also kept constant throughout the problem. \\
+
+\section*{Equation} 
+The density is changed in each time step using summation density which is
+\begin{center}
+\begin{equation}
+	\rho_i = \sum_{j\in G(i)}mW_j \cite{class_notes}
+\end{equation}
+\end{center}
+Where G(i) is the [$x_i$-2h, $x_i$+2h] neighbourhood of i where the kernel function is not 0. W is the kernel function. Cubic Spline kernel function is used in this problem as it was found to be the better kernel function from the previous assignment. 
+The velocity is propagated using the formula
+\begin{center}
+\begin{equation}
+	\frac{dv_i}{dt} = -\sum_{j\in G(i)}m\left( \frac{p_i}{\rho_i^2}+\frac{p_j}{\rho_j^2}+\pi_{ij} \right)\Delta W_j \cite{class_notes}
+\end{equation}
+\end{center}where $\Delta W_j$ is the derivative of the Cubic Spline function. $\pi_{ij}$ is the artificial viscosity function which is used if the particles i and j are approaching each other i.e, if $(v_i-v_j)(x_i-x_j)<0$\\
+$$\pi_{ij} = \frac{-\alpha \tilde{c_{ij}}\mu_{ij}+\beta\mu_{ij}^2}{\tilde{\rho_{ij}}}\cite{class_notes}$$
+$$\mu_{ij} = \frac{h(v_i-v_j)(x_i-x_j)}{|x_i-x_j|^2+\eta^2}$$ 
+Where $\tilde{c_{ij}}$ is the average speed of the sound of particles i and j, $\tilde{\rho_{ij}}$ is the average of the densities of particles i and j and $\eta$ = 0.1h \cite{monaghan} \\
+The energy is propagated using 
+\begin{center}
+\begin{equation}
+	\frac{de_i}{dt} = \frac{1}{2}\sum_{j\in G(i)}m\left( \frac{p_i}{\rho_i^2}+\frac{p_j}{\rho_j^2}+\pi_{ij} \right)\Delta W_j \cite{class_notes}
+\end{equation}
+\end{center}
+Position of the particle is changed using the equation
+\begin{center}
+\begin{equation}
+	\frac{dx_i}{dt} = v_i +  x\_sph
+\end{equation}
+\end{center}
+$$	x\_sph = \frac{1}{2}\sum_{j\in G(i)}m(v_j-v_i)W_j/\tilde{\rho_{ij}} $$
+Pressure is found by using the formula
+\begin{center}
+\begin{equation}
+	P = \left(\gamma-1 \right)\rho e
+\end{equation}
+\end{center}
+Euler integrator is used for integration. dt = 0.0001 and total time of 0.2s is used for the problem\\
+
+Exact solution is found out by solving the analytical solution available for the SOD shock tube case. \cite{exact_solution}
 
 
+\newpage
+
+\section*{Results}
+\begin{figure}[H]
+	\includegraphics[width=\textwidth]{density.png}
+	\caption{Density Variation across the shock tube}
+\end{figure}
+\begin{figure}[H]
+	\includegraphics[width=\textwidth]{pressure.png}
+	\caption{Pressure Variation across the shock tube}
+\end{figure}
+\begin{figure}[H]
+	\includegraphics[width=\textwidth]{energy.png}
+	\caption{Energy Variation across the shock tube}
+\end{figure}
+\begin{figure}[H]
+	\includegraphics[width=\textwidth]{velocity.png}
+	\caption{Velocity Variation across the shock tube}
+\end{figure}
+
+\section*{Conclusions}
+\begin{itemize}
+	\item Summation density is used to find the density in each time step instead of finding the SPH approximation for the derivative of the density which resulted in blowing up. This maybe because the number of particles are not enough. 
+	\item To find $\frac{dx}{dt}$ on the right hand side $x\_sph$ is added to v directly instead of writing SPH approximation for v because writing SPH approximation was resulted in discontinuty. This too maybe because of insufficient particles.  
+	\item The SPH approximation of the varaibles density, pressure, velocity and energy agree with the exact solution except at the boundaries where SPH approximation was found to fail from the previous assignment. 
+\end{itemize}
+
+\begin{thebibliography}{1}
+\bibitem{monaghan}
+	JJ Monaghan, {\em Smoothed particle hydrodynamics}, 2005.
+\bibitem{class_notes}
+	Prof Prabhu Ramachandran, {\em AE 625 - Particle Methods for fluid flow simulation}, Autumn Semester 2016.
+\bibitem{exact_solution}
+	Wikipedia, \url{https://en.wikipedia.org/wiki/Sod_shock_tube}
+\end{thebibliography}
 
 
 \end{document}
